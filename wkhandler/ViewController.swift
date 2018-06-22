@@ -61,7 +61,7 @@ class ViewController: UIViewController {
     
     func createWebView() {
         let configuration = WKWebViewConfiguration()
-        configuration.setURLSchemeHandler(MnemCustomScheme(), forURLScheme: MnemCustomScheme.urlScheme)
+        configuration.setURLSchemeHandler(MnemCustomScheme(), forURLScheme: MnemCustomScheme.scheme)
         wkv = WKWebView(frame: .zero, configuration: configuration)
         view.addSubview(wkv)
         

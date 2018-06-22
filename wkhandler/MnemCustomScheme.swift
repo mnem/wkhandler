@@ -11,11 +11,19 @@ import WebKit
 
 @objc
 class MnemCustomScheme: NSObject, WKURLSchemeHandler {
-    static let urlScheme = "mnem"
+    static let scheme = "mnem"
+    
+    var tasks = [URLSessionDataTask : WKURLSchemeTask]()
+    var session: URLSession!
+    
+    override init() {
+        super.init()
+        let configuration = URLSessionConfiguration.default
+        session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+    }
     
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
         print("Start \(String(describing: urlSchemeTask.request.url?.absoluteString))")
-        let session = URLSession.shared
         var request = urlSchemeTask.request
         guard let requestURLString = request.url?.absoluteString else {
             print("Could not get string for URL")
@@ -23,35 +31,51 @@ class MnemCustomScheme: NSObject, WKURLSchemeHandler {
         }
         request.url = URL(string: requestURLString.replacingOccurrences(of: "mnem://", with: "https://"))
         
-        let task = session.dataTask(with: request) { (data, response, error) in
-            if let error = error {
-                print("Data task failed with error: \(String(describing: error))")
-                urlSchemeTask.didFailWithError(error)
-                return
-            }
-            guard let data = data else {
-                print("Data task failed to get data")
-                let error = NSError(domain: "app", code: 1, userInfo: nil)
-                urlSchemeTask.didFailWithError(error)
-                return
-            }
-            guard let response = response else {
-                print("Data task failed to get response")
-                let error = NSError(domain: "app", code: 2, userInfo: nil)
-                urlSchemeTask.didFailWithError(error)
-                return
-            }
-            urlSchemeTask.didReceive(response)
-            urlSchemeTask.didReceive(data)
-            urlSchemeTask.didFinish()
-            print("Completed \(String(describing: urlSchemeTask.request.url?.absoluteString))")
-        }
+        let task = session.dataTask(with: request)
+        tasks[task] = urlSchemeTask;
+
         print("Starting data task")
         task.resume()
     }
     
     func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
         print("Stop \(String(describing: urlSchemeTask.request.url?.absoluteString))")
+    }
+    
+}
+
+extension MnemCustomScheme: URLSessionDataDelegate {
+    
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        guard let dataTask = task as? URLSessionDataTask, let wkTask = tasks[dataTask] else {
+            print("ERROR: Could not find WK Task")
+            return
+        }
+        if let error = error {
+            wkTask.didFailWithError(error)
+        } else {
+            wkTask.didFinish()
+        }
+        
+        tasks.removeValue(forKey: dataTask)
+    }
+    
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        guard let wkTask = tasks[dataTask] else {
+            print("ERROR: Could not find WK Task")
+            completionHandler(.cancel)
+            return
+        }
+        wkTask.didReceive(response)
+        completionHandler(.allow)
+    }
+    
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        guard let wkTask = tasks[dataTask] else {
+            print("ERROR: Could not find WK Task")
+            return
+        }
+        wkTask.didReceive(data)
     }
     
 }
